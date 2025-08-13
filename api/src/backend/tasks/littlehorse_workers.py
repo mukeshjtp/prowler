@@ -7,10 +7,9 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-import littlehorse
+from littlehorse import LHConfig, LHTaskWorker, WorkerContext
 from config.littlehorse import LITTLEHORSE_CONFIG, LITTLEHORSE_DEADLOCK_ATTEMPTS
 from django_celery_beat.models import PeriodicTask
-from littlehorse import LHTaskWorker, WorkerContext
 
 from api.db_utils import rls_transaction
 from api.decorators import set_tenant
@@ -19,7 +18,6 @@ from api.v1.serializers import ScanTaskSerializer
 from tasks.jobs.backfill import backfill_resource_scan_summaries
 from tasks.jobs.connection import check_lighthouse_connection, check_provider_connection
 from tasks.jobs.deletion import delete_provider, delete_tenant
-from tasks.jobs.export import generate_outputs_job
 from tasks.jobs.scan import (
     aggregate_findings,
     create_compliance_requirements,
@@ -30,7 +28,7 @@ from tasks.utils import get_next_execution_datetime
 logger = logging.getLogger(__name__)
 
 # Initialize LittleHorse configuration
-lh_config = littlehorse.LHConfig(**LITTLEHORSE_CONFIG)
+lh_config = LHConfig(**LITTLEHORSE_CONFIG)
 
 class ProwlerTaskWorkers:
     """LittleHorse task workers for Prowler operations."""

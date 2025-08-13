@@ -6,16 +6,15 @@ This module defines workflows that replace Celery task chains with LittleHorse w
 import logging
 from typing import Any, Dict, List, Optional
 
-import littlehorse
-from littlehorse import WorkflowSpec
+from littlehorse import LHConfig, LHClient, WorkflowSpec, VariableType
 
 from config.littlehorse import LITTLEHORSE_CONFIG
 
 logger = logging.getLogger(__name__)
 
 # Initialize LittleHorse client
-lh_config = littlehorse.LHConfig(**LITTLEHORSE_CONFIG)
-client = littlehorse.LHClient(lh_config)
+lh_config = LHConfig(**LITTLEHORSE_CONFIG)
+client = LHClient(lh_config)
 
 class LittleHorseWorkflows:
     """Class containing all LittleHorse workflow definitions for Prowler."""
@@ -33,10 +32,10 @@ class LittleHorseWorkflows:
         """
         def scan_wf(wf: WorkflowSpec):
             # Input variables
-            tenant_id = wf.add_variable("tenant_id", littlehorse.VariableType.STR)
-            scan_id = wf.add_variable("scan_id", littlehorse.VariableType.STR)
-            provider_id = wf.add_variable("provider_id", littlehorse.VariableType.STR)
-            checks_to_execute = wf.add_variable("checks_to_execute", littlehorse.VariableType.JSON_OBJ).with_default_value([])
+            tenant_id = wf.add_variable("tenant_id", VariableType.STR)
+            scan_id = wf.add_variable("scan_id", VariableType.STR)
+            provider_id = wf.add_variable("provider_id", VariableType.STR)
+            checks_to_execute = wf.add_variable("checks_to_execute", VariableType.JSON_OBJ).with_default_value([])
             
             # Step 1: Perform the actual scan
             scan_result = wf.execute_task(
@@ -82,8 +81,8 @@ class LittleHorseWorkflows:
         This workflow handles scheduled scans with deduplication logic.
         """
         def scheduled_scan_wf(wf: WorkflowSpec):
-            tenant_id = wf.add_variable("tenant_id", littlehorse.VariableType.STR)
-            provider_id = wf.add_variable("provider_id", littlehorse.VariableType.STR)
+            tenant_id = wf.add_variable("tenant_id", VariableType.STR)
+            provider_id = wf.add_variable("provider_id", VariableType.STR)
             
             # Check for existing scheduled scan and create scan instance
             scan_setup = wf.execute_task(
@@ -108,8 +107,8 @@ class LittleHorseWorkflows:
     def provider_deletion_workflow():
         """Workflow for deleting providers."""
         def provider_deletion_wf(wf: WorkflowSpec):
-            tenant_id = wf.add_variable("tenant_id", littlehorse.VariableType.STR)
-            provider_id = wf.add_variable("provider_id", littlehorse.VariableType.STR)
+            tenant_id = wf.add_variable("tenant_id", VariableType.STR)
+            provider_id = wf.add_variable("provider_id", VariableType.STR)
             
             wf.execute_task(
                 "delete-provider",
@@ -123,7 +122,7 @@ class LittleHorseWorkflows:
     def tenant_deletion_workflow():
         """Workflow for deleting tenants."""
         def tenant_deletion_wf(wf: WorkflowSpec):
-            tenant_id = wf.add_variable("tenant_id", littlehorse.VariableType.STR)
+            tenant_id = wf.add_variable("tenant_id", VariableType.STR)
             
             wf.execute_task(
                 "delete-tenant",
