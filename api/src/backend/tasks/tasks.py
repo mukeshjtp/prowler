@@ -6,6 +6,15 @@ from celery import chain, shared_task
 from celery.utils.log import get_task_logger
 from config.celery import RLSTask
 from config.django.base import DJANGO_FINDINGS_BATCH_SIZE, DJANGO_TMP_OUTPUT_DIRECTORY
+from config.env import env
+
+# LittleHorse compatibility imports
+try:
+    from config.workflows import client as lh_client, start_workflow
+    LITTLEHORSE_ENABLED = env.bool("LITTLEHORSE_ENABLED", default=False)
+except ImportError:
+    LITTLEHORSE_ENABLED = False
+    lh_client = None
 from django_celery_beat.models import PeriodicTask
 from tasks.jobs.backfill import backfill_resource_scan_summaries
 from tasks.jobs.connection import check_lighthouse_connection, check_provider_connection
@@ -40,12 +49,21 @@ logger = get_task_logger(__name__)
 def _perform_scan_complete_tasks(tenant_id: str, scan_id: str, provider_id: str):
     """
     Helper function to perform tasks after a scan is completed.
+    
+    Uses LittleHorse workflows when enabled, otherwise falls back to Celery.
 
     Args:
         tenant_id (str): The tenant ID under which the scan was performed.
         scan_id (str): The ID of the scan that was performed.
         provider_id (str): The primary key of the Provider instance that was scanned.
     """
+    if LITTLEHORSE_ENABLED:
+        # Use LittleHorse workflow for post-scan tasks
+        # These tasks will be handled within the main scan workflow
+        logger.info(f"Post-scan tasks will be handled by LittleHorse workflow for scan {scan_id}")
+        return
+    
+    # Fallback to Celery implementation
     create_compliance_requirements_task.apply_async(
         kwargs={"tenant_id": tenant_id, "scan_id": scan_id}
     )
@@ -106,6 +124,8 @@ def perform_scan_task(
     This task runs a Prowler scan on the provider identified by `provider_id`
     under the tenant identified by `tenant_id`. The scan will use the `scan_id`
     for tracking purposes.
+    
+    Uses LittleHorse workflows when enabled, otherwise uses Celery.
 
     Args:
         tenant_id (str): The tenant ID under which the scan is being performed.
@@ -116,6 +136,22 @@ def perform_scan_task(
     Returns:
         dict: The result of the scan execution, typically including the status and results of the performed checks.
     """
+    if LITTLEHORSE_ENABLED:
+        # Use LittleHorse workflow
+        try:
+            workflow_id = start_workflow("scan", {
+                "tenant_id": tenant_id,
+                "scan_id": scan_id,
+                "provider_id": provider_id,
+                "checks_to_execute": checks_to_execute or []
+            })
+            logger.info(f"Started LittleHorse scan workflow {workflow_id} for scan {scan_id}")
+            return {"workflow_id": workflow_id, "scan_id": scan_id, "backend": "littlehorse"}
+        except Exception as e:
+            logger.error(f"Failed to start LittleHorse scan workflow: {e}")
+            # Fallback to direct execution
+    
+    # Fallback to original Celery implementation
     result = perform_prowler_scan(
         tenant_id=tenant_id,
         scan_id=scan_id,
@@ -137,6 +173,8 @@ def perform_scheduled_scan_task(self, tenant_id: str, provider_id: str):
     under the tenant identified by `tenant_id`. It initiates a new scan instance with the task ID
     for tracking purposes. This task is intended to be run on a schedule (e.g., daily) to
     automatically perform scans without manual intervention.
+    
+    Uses LittleHorse workflows when enabled, otherwise uses Celery.
 
     Args:
         self: The task instance (automatically passed when bind=True).
@@ -148,6 +186,20 @@ def perform_scheduled_scan_task(self, tenant_id: str, provider_id: str):
         of the performed checks.
 
     """
+    if LITTLEHORSE_ENABLED:
+        # Use LittleHorse workflow for scheduled scans
+        try:
+            workflow_id = start_workflow("scheduled-scan", {
+                "tenant_id": tenant_id,
+                "provider_id": provider_id
+            })
+            logger.info(f"Started LittleHorse scheduled scan workflow {workflow_id} for provider {provider_id}")
+            return {"workflow_id": workflow_id, "provider_id": provider_id, "backend": "littlehorse"}
+        except Exception as e:
+            logger.error(f"Failed to start LittleHorse scheduled scan workflow: {e}")
+            # Fallback to direct execution
+    
+    # Fallback to original Celery implementation
     task_id = self.request.id
 
     with rls_transaction(tenant_id):
